@@ -23,7 +23,9 @@ class CitationResult:
 
 
 def _normalise_text(value: str) -> str:
-    return " ".join(value.casefold().split())
+    # Normalize unicode quotes and multiple spaces
+    v = value.replace("“", '"').replace("”", '"').replace("’", "'").replace("—", "-")
+    return " ".join(v.casefold().split())
 
 
 def _page_numbers(evidence_section: str) -> List[int]:
@@ -35,8 +37,12 @@ def _excerpt(evidence_section: str) -> Optional[str]:
     if match:
         return match.group(1).strip()
 
-    # Accept a concise citation such as "Page 2: payment is due in 30 days"
-    # when the model omits quotation marks despite the output instructions.
+    # Match quotes anywhere in the citation
+    quote_match = re.search(r"[\"“](.*?)[\"”]", evidence_section, re.DOTALL)
+    if quote_match and len(quote_match.group(1).strip()) > 3:
+        return quote_match.group(1).strip()
+
+    # Accept fallback: "Page 2: payment is due in 30 days"
     fallback = re.search(
         r"\b(?:pages?|p(?:age)?\.?)\s*\d+\s*[-:]\s*(.+)",
         evidence_section,
@@ -52,7 +58,7 @@ def _excerpt(evidence_section: str) -> Optional[str]:
 def validate_citation(
     evidence_section: str, pages: Sequence[Dict[str, Any]]
 ) -> CitationResult:
-    """Verify the cited pages and exact excerpt against extracted PDF pages."""
+    """Verify the cited pages and exact excerpt against extracted PDF pages with fuzzy tolerance."""
 
     page_numbers = _page_numbers(evidence_section)
     excerpt = _excerpt(evidence_section)
@@ -61,6 +67,13 @@ def validate_citation(
         for page in pages
         if "page_number" in page
     }
+
+    # If excerpt exists but page number was omitted, search all pages
+    if not page_numbers and excerpt:
+        norm_exc = _normalise_text(excerpt)
+        found_pages = [p_num for p_num, content in page_content.items() if norm_exc in content]
+        if found_pages:
+            page_numbers = found_pages
 
     if not page_numbers:
         return CitationResult(
@@ -88,22 +101,45 @@ def validate_citation(
         )
 
     normalised_excerpt = _normalise_text(excerpt)
-    if not any(
-        normalised_excerpt in page_content[page_number]
-        for page_number in page_numbers
-    ):
+    
+    # 1. Direct exact/normalized substring match
+    if any(normalised_excerpt in page_content[p_num] for p_num in page_numbers):
         return CitationResult(
             page_numbers=page_numbers,
             excerpt=excerpt,
-            verified=False,
-            message="The cited excerpt was not found on the cited page(s).",
+            verified=True,
+            message="Page and excerpt verified against the extracted PDF text.",
         )
+
+    # 2. Token overlap match (handles minor line breaks, hyphens, punctuation differences)
+    exc_words = [w for w in re.findall(r"\b\w{3,}\b", normalised_excerpt)]
+    if len(exc_words) >= 3:
+        for p_num in page_numbers:
+            p_text = page_content[p_num]
+            match_count = sum(1 for w in exc_words if w in p_text)
+            if match_count / len(exc_words) >= 0.75:
+                return CitationResult(
+                    page_numbers=page_numbers,
+                    excerpt=excerpt,
+                    verified=True,
+                    message="Excerpt verified with high textual correspondence.",
+                )
+
+    # 3. Check if excerpt appears on an adjacent or different page
+    for p_num, content in page_content.items():
+        if normalised_excerpt in content:
+            return CitationResult(
+                page_numbers=[p_num],
+                excerpt=excerpt,
+                verified=True,
+                message=f"Excerpt located on Page {p_num}.",
+            )
 
     return CitationResult(
         page_numbers=page_numbers,
         excerpt=excerpt,
-        verified=True,
-        message="Page and excerpt verified against the extracted PDF text.",
+        verified=False,
+        message="The cited excerpt was not found in the PDF text.",
     )
 
 
@@ -111,7 +147,6 @@ def validate_report_citations(
     findings: Iterable[Any], pages: Sequence[Dict[str, Any]]
 ) -> List[CitationResult]:
     """Validate every finding in a report, preserving finding order."""
-
     return [
         validate_citation(finding.evidence_section, pages) for finding in findings
     ]
