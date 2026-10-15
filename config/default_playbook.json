@@ -1,0 +1,23 @@
+[
+  {
+    "id": "payment_deadline",
+    "category": "Payment",
+    "description": "Check whether a payment deadline and acceptance condition are stated clearly.",
+    "review_hint": "Look for due dates, invoice terms, and acceptance conditions.",
+    "output_question": "Is the payment deadline clear and objectively defined?"
+  },
+  {
+    "id": "ip_ownership",
+    "category": "Intellectual Property",
+    "description": "Verify whether work product ownership transfer is clearly scoped.",
+    "review_hint": "Check for assignment of deliverables vs. pre-existing tools and background IP.",
+    "output_question": "Does the agreement distinguish newly created deliverables from pre-existing tools?"
+  },
+  {
+    "id": "liability_cap",
+    "category": "Liability",
+    "description": "Inspect liability limits and indemnification obligations.",
+    "review_hint": "Look for limitations of liability, caps linked to fees paid, and broad indemnities.",
+    "output_question": "Is there a reciprocal and defined liability cap?"
+  }
+]

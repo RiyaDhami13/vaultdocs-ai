@@ -11,3 +11,17 @@ A local-first, privacy-focused contract risk screening assistant designed for fr
 1. Install [Ollama](https://ollama.com/) and download the target model:
    ```bash
    ollama pull gemma:2b# vaultdocs-ai
+   ```
+2. Install Python dependencies and start Streamlit:
+   ```bash
+   pip install -r requirements.txt
+   streamlit run app.py
+   ```
+
+## Audit output
+
+The local model is required to return a Pydantic-validated `AuditReport`. Each
+finding includes a page citation and quoted excerpt. VaultDocs AI checks those
+citations against the extracted PDF text and marks missing or mismatched
+citations as unverified. A verified or unverified Markdown report can be
+downloaded from the audit results screen.# vaultdocs-ai
